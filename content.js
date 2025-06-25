@@ -17,6 +17,8 @@ const speedOptions = [0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5];
 
 // State management variables
 let isUpdatingSpeed = false; // Prevents recursive speed updates
+let isApplyingNavigationSpeed = false; // Prevents preferred speed saving during navigation
+let isNavigating = false; // Tracks when we're in the middle of navigation
 let menuUpdateTimeout = null; // Debounce timer for menu updates
 let lastRateChangeTime = 0; // Timestamp of last rate change for deduplication
 let lastRateChangeValue = 1; // Last rate change value for deduplication
@@ -25,6 +27,16 @@ let isExtensionInitialized = false; // Tracks extension initialization state
 
 // Storage configuration
 const SPEED_STORAGE_KEY = 'youtube-speed-extender-preferred-speed';
+const KEYBOARD_SPEED_STORAGE_KEY = 'youtube-speed-extender-keyboard-speed';
+const NAVIGATION_MODE_KEY = 'youtube-speed-extender-navigation-mode';
+const CUSTOM_NAVIGATION_SPEED_KEY = 'youtube-speed-extender-custom-navigation-speed';
+
+// Navigation mode options
+const NAVIGATION_MODES = {
+  CONTINUE: 'continue',    // Continue current speed to next video
+  DEFAULT: 'default',     // Always use 1x (normal) for new videos
+  CUSTOM: 'custom'        // Use custom speed for new videos
+};
 
 /**
  * Saves the user's preferred playback speed to local storage
@@ -55,6 +67,99 @@ function loadPreferredSpeed() {
     // Silently handle storage errors
   }
   return 1; // Default to normal speed
+}
+
+/**
+ * Saves the navigation mode preference
+ * @param {string} mode - The navigation mode ('continue', 'default', or 'custom')
+ */
+function saveNavigationMode(mode) {
+  try {
+    if (Object.values(NAVIGATION_MODES).includes(mode)) {
+      localStorage.setItem(NAVIGATION_MODE_KEY, mode);
+    }
+  } catch (error) {
+    // Silently handle storage errors
+  }
+}
+
+/**
+ * Loads the navigation mode preference
+ * @returns {string} The saved mode or 'continue' as default
+ */
+function loadNavigationMode() {
+  try {
+    const savedMode = localStorage.getItem(NAVIGATION_MODE_KEY);
+    if (savedMode && Object.values(NAVIGATION_MODES).includes(savedMode)) {
+      return savedMode;
+    }
+  } catch (error) {
+    // Silently handle storage errors
+  }
+  return NAVIGATION_MODES.CONTINUE; // Default to continue mode
+}
+
+/**
+ * Saves the custom navigation speed
+ * @param {number} speed - The custom speed for new videos
+ */
+function saveCustomNavigationSpeed(speed) {
+  try {
+    if (speedOptions.includes(speed)) {
+      localStorage.setItem(CUSTOM_NAVIGATION_SPEED_KEY, speed.toString());
+    }
+  } catch (error) {
+    // Silently handle storage errors
+  }
+}
+
+/**
+ * Loads the custom navigation speed
+ * @returns {number} The saved custom speed or 1 (normal) as default
+ */
+function loadCustomNavigationSpeed() {
+  try {
+    const savedSpeed = localStorage.getItem(CUSTOM_NAVIGATION_SPEED_KEY);
+    if (savedSpeed) {
+      const speed = parseFloat(savedSpeed);
+      if (speedOptions.includes(speed)) {
+        return speed;
+      }
+    }
+  } catch (error) {
+    // Silently handle storage errors
+  }
+  return 1; // Default to normal speed
+}
+
+/**
+ * Gets the appropriate speed for navigation based on user preferences
+ * @returns {number} The speed to use for new videos
+ */
+/**
+ * Determines which speed to use for navigation based on user preferences
+ * @returns {number} The speed to apply for navigation
+ */
+function getNavigationSpeed() {
+  const navigationMode = loadNavigationMode();
+  
+  switch (navigationMode) {
+    case NAVIGATION_MODES.CONTINUE:
+      // Continue current speed (use preferred speed which tracks current video speed)
+      return loadPreferredSpeed();
+    
+    case NAVIGATION_MODES.DEFAULT:
+      // Always use default speed (1x)
+      return 1;
+    
+    case NAVIGATION_MODES.CUSTOM:
+      // Use custom navigation speed
+      return loadCustomNavigationSpeed();
+    
+    default:
+      // Fallback to continue mode
+      return loadPreferredSpeed();
+  }
 }
 
 /**
@@ -129,22 +234,49 @@ function updateYouTubeSpeedSetting(playbackRate) {
 
 /**
  * Applies the user's preferred speed to the current video
+ * @param {boolean} isNavigation - Whether this is called during navigation
  */
-function applyPreferredSpeed() {
+function applyPreferredSpeed(isNavigation = false) {
   const video = document.querySelector('video');
   if (!video) return;
   
-  const preferredSpeed = loadPreferredSpeed();
+  const targetSpeed = isNavigation ? getNavigationSpeed() : loadPreferredSpeed();
   const currentSpeed = video.playbackRate;
   
-  // Only apply if there's a significant difference (avoid minor floating point differences)
-  if (Math.abs(currentSpeed - preferredSpeed) > 0.05) {
+  // Apply speed if there's a significant difference (avoid minor floating point differences)
+  if (Math.abs(currentSpeed - targetSpeed) > 0.05) {
     isUpdatingSpeed = true;
-    video.playbackRate = preferredSpeed;
+    if (isNavigation) {
+      isApplyingNavigationSpeed = true;
+    }
+    
+    video.playbackRate = targetSpeed;
+    
     setTimeout(() => {
       isUpdatingSpeed = false;
-      updateYouTubeSpeedSetting(preferredSpeed);
+      if (isNavigation) {
+        isApplyingNavigationSpeed = false;
+        
+        // For "Continue Current Speed" mode, ensure the applied navigation speed 
+        // is saved as the preferred speed for future navigations
+        const navigationMode = loadNavigationMode();
+        if (navigationMode === NAVIGATION_MODES.CONTINUE) {
+          // Force save the navigation speed to ensure persistence
+          setTimeout(() => {
+            savePreferredSpeed(targetSpeed);
+          }, 50);
+        }
+      }
+      updateYouTubeSpeedSetting(targetSpeed);
     }, 100);
+  } else if (isNavigation) {
+    // Even if speed doesn't change, save it for continue mode to ensure persistence
+    const navigationMode = loadNavigationMode();
+    if (navigationMode === NAVIGATION_MODES.CONTINUE) {
+      setTimeout(() => {
+        savePreferredSpeed(targetSpeed);
+      }, 50);
+    }
   }
 }
 
@@ -213,31 +345,42 @@ function showCustomOverlay(rate) {
 /**
  * Initializes the extension's core functionality
  * Sets up event listeners and synchronization features
+ * @param {boolean} isNavigation - Whether this is called during navigation
  */
-function initializeExtension() {
+function initializeExtension(isNavigation = false) {
   if (isExtensionInitialized) return;
   
   isExtensionInitialized = true;
   
-  // Apply preferred speed to current video
-  applyPreferredSpeed();
+  // Apply appropriate speed based on context
+  if (isNavigation) {
+    applyPreferredSpeed(true);
+  } else {
+    applyPreferredSpeed();
+  }
   
   // Set up speed synchronization and event listeners
   setupSpeedSynchronization();
   
-  // Set up navigation observer for page changes
-  setupNavigationObserver();
+  // Note: Navigation observer is set up globally, not per initialization
 }
 
 /**
  * Main keyboard event handler for speed control
  * Listens for '.' (increase speed) and ',' (decrease speed) key presses
+ * Also handles 'Ctrl+Shift+S' for opening speed settings
  */
 document.addEventListener('keydown', (e) => {
   // Ignore keypresses in input fields and editable content
   if (e.target.tagName.toLowerCase() === 'input' || 
       e.target.tagName.toLowerCase() === 'textarea' ||
       e.target.isContentEditable) return;
+  // Handle settings shortcut (Ctrl+Shift+S)
+  if (e.ctrlKey && e.shiftKey && e.key === 'S') {
+    e.preventDefault();
+    showSpeedSettingsModal();
+    return;
+  }
 
   // Only handle period and comma keys
   if (e.key !== '.' && e.key !== ',') return;
@@ -257,17 +400,15 @@ document.addEventListener('keydown', (e) => {
   }
 
   const newRate = speedOptions[newIndex];
-  
-  // Always show overlay, even if speed doesn't change (at min/max)
+    // Always show overlay, even if speed doesn't change (at min/max)
   showCustomOverlay(newRate);
   
   // Only change playback rate if speed actually changes
   if (newIndex !== currentIndex) {
     isUpdatingSpeed = true; // Prevent recursive calls
     video.playbackRate = newRate;
-    
-    // Save the new preferred speed
-    savePreferredSpeed(newRate);
+      // Save the new keyboard-set speed for navigation
+    saveKeyboardSpeed(newRate);
     
     // Update native settings with debounce to prevent recursion
     setTimeout(() => {
@@ -275,29 +416,8 @@ document.addEventListener('keydown', (e) => {
       immediateUpdateSettingsMenu(newRate);
     }, 0);
   }
-
   e.preventDefault();
 });
-
-/**
- * Sets up navigation observer to handle URL changes in YouTube's SPA
- * Re-initializes extension functionality when navigating between videos
- */
-function setupNavigationObserver() {
-  let currentUrl = location.href;
-  const urlObserver = new MutationObserver(() => {
-    if (location.href !== currentUrl) {
-      currentUrl = location.href;
-      
-      // Apply preferred speed to new video after navigation
-      setTimeout(() => {
-        applyPreferredSpeed();
-      }, 1000);
-    }
-  });
-
-  urlObserver.observe(document.body, { childList: true, subtree: true });
-}
 
 /**
  * Sets up comprehensive speed synchronization and event handling
@@ -331,9 +451,7 @@ function setupSpeedSynchronization() {
         }, 100);
       }
     }, 100);
-  });
-  
-  // Handle playback rate changes from YouTube's native controls
+  });    // Handle playback rate changes from YouTube's native controls
   video.addEventListener('ratechange', () => {
     if (isUpdatingSpeed) return; // Prevent recursive calls
     
@@ -347,18 +465,38 @@ function setupSpeedSynchronization() {
     
     lastRateChangeTime = currentTime;
     lastRateChangeValue = currentRate;
-    
-    // Only save user-initiated speed changes (not seeking resets)
-    if (!isSeeking && speedOptions.includes(currentRate)) {
-      savePreferredSpeed(currentRate);
+      // Only save user-initiated speed changes (not seeking resets or navigation speed applications)
+    if (!isSeeking && !isApplyingNavigationSpeed && speedOptions.includes(currentRate)) {
+      // Additional check: In "Continue Current Speed" mode, don't override with 1x during navigation
+      const navigationMode = loadNavigationMode();
+      const savedSpeed = loadPreferredSpeed();
+      
+      // If in continue mode and the current rate is 1x but we have a saved speed > 1x,
+      // and we're navigating, this might be YouTube resetting during navigation - don't save it
+      if (navigationMode === NAVIGATION_MODES.CONTINUE && currentRate === 1 && savedSpeed > 1 && isNavigating) {
+        // This is likely a navigation reset, restore the saved speed instead
+        setTimeout(() => {
+          if (video.playbackRate === 1) {
+            isUpdatingSpeed = true;
+            video.playbackRate = savedSpeed;
+            setTimeout(() => {
+              isUpdatingSpeed = false;
+              updateYouTubeSpeedSetting(savedSpeed);
+            }, 100);
+          }
+        }, 500);
+      } else if (!isNavigating || currentRate !== 1) {
+        // Normal user-initiated speed change, save it (but not during navigation if it's 1x)
+        savePreferredSpeed(currentRate);
+      }
       showCustomOverlay(currentRate);
-    } else if (!isSeeking) {
+    } else if (!isSeeking && !isApplyingNavigationSpeed) {
       showCustomOverlay(currentRate);
     }
     
     // Always update menu items
     updateYouTubeSpeedSetting(currentRate);
-  });  // Set up mutation observers for settings menu integration
+  });// Set up mutation observers for settings menu integration
   const settingsObserver = new MutationObserver((mutations) => {
     let shouldUpdateSettings = false;
     let shouldUpdateSpeedMenu = false;
@@ -506,10 +644,9 @@ function enhanceSpeedMenu(speedMenu) {
       // Add click handler for speed selection
       menuItem.addEventListener('click', () => {
         if (video) {
-          isUpdatingSpeed = true;
-          video.playbackRate = speed;
-          showCustomOverlay(speed);
-          savePreferredSpeed(speed);
+          isUpdatingSpeed = true;      video.playbackRate = speed;
+      showCustomOverlay(speed);
+      savePreferredSpeed(speed);
           
           setTimeout(() => {
             updateYouTubeSpeedSetting(speed);
@@ -694,52 +831,77 @@ function directUpdateSettingsMenu(playbackRate) {
 
 /**
  * Applies the user's preferred speed on page load
+ * @param {boolean} isNavigation - Whether this is called during navigation
  */
-function autoApplyPreferredSpeed() {
+function autoApplyPreferredSpeed(isNavigation = false) {
   const video = document.querySelector('video');
   if (!video) return;
   
-  const preferredSpeed = loadPreferredSpeed();
+  const targetSpeed = isNavigation ? getNavigationSpeed() : loadPreferredSpeed();
   const currentSpeed = video.playbackRate;
   
-  // Apply preferred speed if it differs from current speed
-  if (preferredSpeed !== 1 && Math.abs(currentSpeed - preferredSpeed) > 0.05) {
-    video.playbackRate = preferredSpeed;
+  // Apply target speed if it differs from current speed (including 1x for default mode)
+  if (Math.abs(currentSpeed - targetSpeed) > 0.05) {
+    if (isNavigation) {
+      isApplyingNavigationSpeed = true;
+    }
+    
+    video.playbackRate = targetSpeed;
     
     // Update settings menu to reflect the new speed
     setTimeout(() => {
-      updateYouTubeSpeedSetting(preferredSpeed);
+      if (isNavigation) {
+        isApplyingNavigationSpeed = false;
+        
+        // For "Continue Current Speed" mode, ensure the applied navigation speed 
+        // is saved as the preferred speed for future navigations
+        const navigationMode = loadNavigationMode();
+        if (navigationMode === NAVIGATION_MODES.CONTINUE) {
+          // Force save the navigation speed to ensure persistence
+          setTimeout(() => {
+            savePreferredSpeed(targetSpeed);
+          }, 50);
+        }
+      }
+      updateYouTubeSpeedSetting(targetSpeed);
     }, 200);
-  } else if (preferredSpeed !== 1) {
-    // Ensure settings menu is updated even if speed matches
+  } else if (targetSpeed !== 1) {
+    // Ensure settings menu is updated even if speed matches (but not for 1x)
     setTimeout(() => {
-      updateYouTubeSpeedSetting(preferredSpeed);
+      updateYouTubeSpeedSetting(targetSpeed);
     }, 200);
+    
+    // For continue mode, save even if speed didn't change to ensure persistence
+    if (isNavigation) {
+      const navigationMode = loadNavigationMode();
+      if (navigationMode === NAVIGATION_MODES.CONTINUE) {
+        setTimeout(() => {
+          savePreferredSpeed(targetSpeed);
+        }, 50);
+      }
+    }
   }
 }
 
 /**
  * Waits for video to be ready and fully initializes the extension
+ * @param {boolean} isNavigation - Whether this is called during navigation
  */
-function waitForVideoAndFullyInitialize() {
-  const video = document.querySelector('video');
-  if (video && video.readyState >= 1) {
-    // Fully initialize the extension
-    initializeExtension();
-    
-    // Apply preferred speed
-    autoApplyPreferredSpeed();
+function waitForVideoAndFullyInitialize(isNavigation = false) {
+  const video = document.querySelector('video');  if (video && video.readyState >= 1) {
+    // Fully initialize the extension (which includes applying appropriate speed)
+    initializeExtension(isNavigation);
     
     // Update settings menu after UI is ready
     setTimeout(() => {
-      const preferredSpeed = loadPreferredSpeed();
-      if (preferredSpeed !== 1) {
-        updateYouTubeSpeedSetting(preferredSpeed);
+      const targetSpeed = isNavigation ? getNavigationSpeed() : loadPreferredSpeed();
+      if (targetSpeed !== 1) {
+        updateYouTubeSpeedSetting(targetSpeed);
       }
     }, 2000);
   } else {
     // Wait for video to load
-    setTimeout(waitForVideoAndFullyInitialize, 500);
+    setTimeout(() => waitForVideoAndFullyInitialize(isNavigation), 500);
   }
 }
 
@@ -752,22 +914,348 @@ const autoApplyObserver = new MutationObserver(() => {
   if (location.href !== currentUrl) {
     currentUrl = location.href;
     
+    // Set navigation flag to prevent speed reset interference
+    isNavigating = true;
+    
     // Reset initialization flag for new page
     isExtensionInitialized = false;
-    
-    // Fully initialize for new video after navigation
+      // Fully initialize for new video after navigation
     setTimeout(() => {
-      waitForVideoAndFullyInitialize();
-      
-      // Update settings menu after navigation
+      waitForVideoAndFullyInitialize(true);
+        // Update settings menu after navigation
       setTimeout(() => {
-        const preferredSpeed = loadPreferredSpeed();
-        if (preferredSpeed !== 1) {
-          updateYouTubeSpeedSetting(preferredSpeed);
-        }
+        const navigationSpeed = getNavigationSpeed();
+        updateYouTubeSpeedSetting(navigationSpeed);
+        
+        // Clear navigation flag after initialization is complete
+        setTimeout(() => {
+          isNavigating = false;
+        }, 1000);
       }, 2000);
     }, 1000);
   }
 });
 
 autoApplyObserver.observe(document.body, { childList: true, subtree: true });
+
+/**
+ * Creates and displays the speed settings modal
+ * Allows users to configure navigation behavior and custom speeds
+ */
+function showSpeedSettingsModal() {
+  // Remove existing modal if present
+  const existingModal = document.getElementById('youtube-speed-settings-modal');
+  if (existingModal) {
+    existingModal.remove();
+    return; // Toggle behavior - if modal is open, close it
+  }
+
+  // Create modal overlay
+  const modalOverlay = document.createElement('div');
+  modalOverlay.id = 'youtube-speed-settings-modal';
+  modalOverlay.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Roboto', 'Arial', sans-serif;
+  `;
+
+  // Create modal content
+  const modalContent = document.createElement('div');
+  modalContent.style.cssText = `
+    background: #1f1f1f;
+    border-radius: 12px;
+    padding: 24px;
+    max-width: 480px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    color: #ffffff;
+    border: 1px solid #333;
+  `;  // Get current settings
+  const currentMode = loadNavigationMode();
+  const currentCustomSpeed = loadCustomNavigationSpeed();
+  const currentKeyboardSpeed = loadKeyboardSpeed();
+
+  // Create modal HTML
+  modalContent.innerHTML = `
+    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px;">
+      <h2 style="margin: 0; color: #fff; font-size: 20px; font-weight: 500;">YouTube Speed Extender Settings</h2>
+      <button id="close-settings-modal" style="
+        background: none; 
+        border: none; 
+        color: #aaa; 
+        font-size: 24px; 
+        cursor: pointer; 
+        padding: 0;
+        width: 32px;
+        height: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 4px;
+        transition: all 0.2s ease;
+      " onmouseover="this.style.background='#333'; this.style.color='#fff';" onmouseout="this.style.background='none'; this.style.color='#aaa';">×</button>
+    </div>
+    
+    <div style="margin-bottom: 24px;">
+      <h3 style="margin: 0 0 12px 0; color: #fff; font-size: 16px; font-weight: 500;">Navigation Behavior</h3>
+      <p style="margin: 0 0 16px 0; color: #aaa; font-size: 14px; line-height: 1.4;">
+        Choose how playback speed should behave when you navigate to a new video:
+      </p>
+      
+      <div style="display: flex; flex-direction: column; gap: 12px;">
+        <label style="display: flex; align-items: flex-start; cursor: pointer; padding: 12px; border-radius: 8px; border: 1px solid #333; transition: all 0.2s ease;" 
+               onmouseover="this.style.background='#2a2a2a';" onmouseout="this.style.background='transparent';">
+          <input type="radio" name="navigation-mode" value="continue" ${currentMode === NAVIGATION_MODES.CONTINUE ? 'checked' : ''} 
+                 style="margin-right: 12px; margin-top: 2px; accent-color: #ff0000;">
+          <div>
+            <div style="color: #fff; font-weight: 500; margin-bottom: 4px;">Continue Current Speed</div>
+            <div style="color: #aaa; font-size: 13px; line-height: 1.3;">Keep using whatever speed you were watching the previous video at</div>
+          </div>
+        </label>
+        
+        <label style="display: flex; align-items: flex-start; cursor: pointer; padding: 12px; border-radius: 8px; border: 1px solid #333; transition: all 0.2s ease;" 
+               onmouseover="this.style.background='#2a2a2a';" onmouseout="this.style.background='transparent';">
+          <input type="radio" name="navigation-mode" value="default" ${currentMode === NAVIGATION_MODES.DEFAULT ? 'checked' : ''} 
+                 style="margin-right: 12px; margin-top: 2px; accent-color: #ff0000;">
+          <div>
+            <div style="color: #fff; font-weight: 500; margin-bottom: 4px;">Use Default Speed</div>
+            <div style="color: #aaa; font-size: 13px; line-height: 1.3;">Always start new videos at normal speed (1x)</div>
+          </div>
+        </label>
+        
+        <label style="display: flex; align-items: flex-start; cursor: pointer; padding: 12px; border-radius: 8px; border: 1px solid #333; transition: all 0.2s ease;" 
+               onmouseover="this.style.background='#2a2a2a';" onmouseout="this.style.background='transparent';">
+          <input type="radio" name="navigation-mode" value="custom" ${currentMode === NAVIGATION_MODES.CUSTOM ? 'checked' : ''} 
+                 style="margin-right: 12px; margin-top: 2px; accent-color: #ff0000;">
+          <div style="flex: 1;">
+            <div style="color: #fff; font-weight: 500; margin-bottom: 4px;">Use Custom Speed</div>
+            <div style="color: #aaa; font-size: 13px; line-height: 1.3; margin-bottom: 8px;">Always start new videos at a specific speed</div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <select id="custom-speed-select" style="
+                background: #333; 
+                color: #fff; 
+                border: 1px solid #555; 
+                border-radius: 4px; 
+                padding: 6px 8px; 
+                font-size: 14px;
+                min-width: 80px;
+              ">
+                ${speedOptions.map(speed => 
+                  `<option value="${speed}" ${speed === currentCustomSpeed ? 'selected' : ''}>${speed}x</option>`
+                ).join('')}
+              </select>
+              <span style="color: #aaa; font-size: 13px;">playback speed</span>
+            </div>
+          </div>
+        </label>      </div>
+    </div>
+    
+    <div style="margin-bottom: 24px; padding: 16px; background: #2a2a2a; border-radius: 8px; border-left: 3px solid #ff0000;">
+      <h4 style="margin: 0 0 8px 0; color: #fff; font-size: 14px; font-weight: 500;">Keyboard Shortcuts</h4>
+      <div style="color: #aaa; font-size: 13px; line-height: 1.4;">
+        • <strong style="color: #fff;">.</strong> (period) - Increase speed<br>
+        • <strong style="color: #fff;">,</strong> (comma) - Decrease speed<br>
+        • <strong style="color: #fff;">Ctrl+Shift+S</strong> - Open settings (this modal)
+      </div>
+    </div><div style="display: flex; gap: 12px; justify-content: flex-end;">
+      <button id="cancel-settings" style="
+        background: #333; 
+        color: #fff; 
+        border: 1px solid #555; 
+        padding: 10px 20px; 
+        border-radius: 6px; 
+        cursor: pointer; 
+        font-size: 14px;
+        transition: all 0.2s ease;
+      " onmouseover="this.style.background='#444';" onmouseout="this.style.background='#333';">Close</button>
+      <button id="save-settings" style="
+        background: #ff0000; 
+        color: #fff; 
+        border: none; 
+        padding: 10px 20px; 
+        border-radius: 6px; 
+        cursor: pointer; 
+        font-size: 14px;
+        font-weight: 500;
+        transition: all 0.2s ease;
+      " onmouseover="this.style.background='#cc0000';" onmouseout="this.style.background='#ff0000';">Save Settings</button>
+    </div>
+  `;
+
+  modalOverlay.appendChild(modalContent);
+  document.body.appendChild(modalOverlay);
+
+  // Add event listeners
+  setupModalEventListeners(modalOverlay);
+}
+
+/**
+ * Sets up event listeners for the settings modal
+ * @param {HTMLElement} modalOverlay - The modal overlay element
+ */
+function setupModalEventListeners(modalOverlay) {
+  const closeButton = modalOverlay.querySelector('#close-settings-modal');
+  const cancelButton = modalOverlay.querySelector('#cancel-settings');
+  const saveButton = modalOverlay.querySelector('#save-settings');
+  const customSpeedSelect = modalOverlay.querySelector('#custom-speed-select');
+  const radioButtons = modalOverlay.querySelectorAll('input[name="navigation-mode"]');
+
+  // Close modal handlers
+  const closeModal = () => modalOverlay.remove();
+  
+  closeButton.addEventListener('click', closeModal);
+  cancelButton.addEventListener('click', closeModal);
+  
+  // Close on overlay click (but not on modal content click)
+  modalOverlay.addEventListener('click', (e) => {
+    if (e.target === modalOverlay) {
+      closeModal();
+    }
+  });
+
+  // Close on Escape key
+  const handleEscape = (e) => {
+    if (e.key === 'Escape') {
+      closeModal();
+      document.removeEventListener('keydown', handleEscape);
+    }
+  };
+  document.addEventListener('keydown', handleEscape);
+
+  // Enable custom speed select when custom mode is selected
+  const updateCustomSpeedState = () => {
+    const customModeSelected = modalOverlay.querySelector('input[value="custom"]').checked;
+    customSpeedSelect.disabled = !customModeSelected;
+    customSpeedSelect.style.opacity = customModeSelected ? '1' : '0.5';
+  };
+
+  // Update custom speed state on radio button change
+  radioButtons.forEach(radio => {
+    radio.addEventListener('change', updateCustomSpeedState);
+  });
+
+  // Initialize custom speed state
+  updateCustomSpeedState();
+
+  // Auto-select custom mode when custom speed is changed
+  customSpeedSelect.addEventListener('change', () => {
+    modalOverlay.querySelector('input[value="custom"]').checked = true;
+    updateCustomSpeedState();
+  });
+
+  // Save settings handler
+  saveButton.addEventListener('click', () => {
+    // Save the selected navigation mode
+    const selectedMode = modalOverlay.querySelector('input[name="navigation-mode"]:checked').value;
+    saveNavigationMode(selectedMode);
+    
+    // Save custom speed if custom mode is selected
+    if (selectedMode === 'custom') {
+      const customSpeed = parseFloat(customSpeedSelect.value);
+      saveCustomNavigationSpeed(customSpeed);
+    }
+    
+    // Show confirmation
+    showSettingsConfirmation();
+    
+    // Close modal
+    closeModal();
+  });
+}
+
+/**
+ * Shows a brief confirmation that settings were saved
+ */
+function showSettingsConfirmation() {
+  // Remove existing confirmation if present
+  const existingConfirmation = document.getElementById('youtube-speed-settings-confirmation');
+  if (existingConfirmation) {
+    existingConfirmation.remove();
+  }
+
+  // Create confirmation overlay
+  const confirmation = document.createElement('div');
+  confirmation.id = 'youtube-speed-settings-confirmation';
+  confirmation.style.cssText = `
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: #00aa00;
+    color: #ffffff;
+    padding: 12px 20px;
+    border-radius: 8px;
+    font-family: 'Roboto', 'Arial', sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    z-index: 10001;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+    opacity: 0;
+    transform: translateX(100%);
+    transition: all 0.3s ease;
+  `;
+  confirmation.textContent = 'Settings saved successfully!';
+
+  document.body.appendChild(confirmation);
+
+  // Animate in
+  setTimeout(() => {
+    confirmation.style.opacity = '1';
+    confirmation.style.transform = 'translateX(0)';
+  }, 100);
+
+  // Auto-remove after 3 seconds
+  setTimeout(() => {
+    confirmation.style.opacity = '0';
+    confirmation.style.transform = 'translateX(100%)';
+    setTimeout(() => {
+      if (confirmation.parentNode) {
+        confirmation.remove();
+      }
+    }, 300);
+  }, 3000);
+}
+
+/**
+ * Saves the keyboard-set preferred playback speed to local storage
+ * @param {number} speed - The playback speed set via keyboard
+ */
+function saveKeyboardSpeed(speed) {
+  try {
+    localStorage.setItem(KEYBOARD_SPEED_STORAGE_KEY, speed.toString());
+    // Also save as regular preferred speed for backward compatibility
+    localStorage.setItem(SPEED_STORAGE_KEY, speed.toString());
+  } catch (error) {
+    // Silently handle storage errors
+  }
+}
+
+/**
+ * Loads the keyboard-set preferred playback speed from local storage
+ * @returns {number} The saved keyboard speed or 1 (normal) as default
+ */
+function loadKeyboardSpeed() {
+  try {
+    const savedSpeed = localStorage.getItem(KEYBOARD_SPEED_STORAGE_KEY);
+    if (savedSpeed) {
+      const speed = parseFloat(savedSpeed);
+      if (speedOptions.includes(speed)) {
+        return speed;
+      }
+    }
+    // Fallback to regular preferred speed if keyboard speed not found
+    return loadPreferredSpeed();
+  } catch (error) {
+    // Silently handle storage errors
+  }
+  return 1; // Default to normal speed
+}

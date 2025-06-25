@@ -1,6 +1,6 @@
 # YouTube Playback Speed Extender
 
-A Chrome extension that extends YouTube's playback speed options beyond the default range and provides keyboard shortcuts for quick speed adjustments.
+A Chrome extension that extends YouTube's playback speed options beyond the default range and provides keyboard shortcuts for quick speed adjustments with configurable navigation behavior.
 
 ## Features
 
@@ -8,11 +8,16 @@ A Chrome extension that extends YouTube's playback speed options beyond the defa
 - **Keyboard Shortcuts**: 
   - Press `.` (period) to increase speed
   - Press `,` (comma) to decrease speed
-- **Custom Overlay**: Shows current playback speed when changed via keyboard
+  - Press `Ctrl+Shift+S` to view settings and test behavior
+- **Automatic Speed Persistence**: Keyboard-set speeds are automatically saved and used for navigation
+  - **Keyboard Speed Memory**: Whatever speed you set with `.` and `,` keys becomes the default for new videos
+  - **Seamless Navigation**: Navigate to any video and it starts at your keyboard-set speed
+  - **No Configuration Needed**: Works automatically - just use the keyboard shortcuts
+- **Settings Modal**: View current keyboard speed and test navigation behavior
+- **Custom Overlay**: Shows current playback speed and source when changed (keyboard, menu, test, etc.)
 - **Complete Menu Integration**: Synchronizes with and enhances YouTube's built-in speed menu
 - **Real-time Menu Updates**: Keeps all player menus updated with current speed
-- **Bidirectional Sync**: Changes made via any method update all interfaces
-- **Smart Navigation**: Automatically reinjects functionality when navigating between YouTube videos
+- **Smart Navigation**: Automatically applies your keyboard-set speed when navigating between YouTube videos
 
 ## Installation
 
@@ -24,11 +29,23 @@ A Chrome extension that extends YouTube's playback speed options beyond the defa
 
 ## Usage
 
-### Keyboard Shortcuts
+### Keyboard Speed Control
 - Navigate to any YouTube video
 - Use `.` to increase playback speed
 - Use `,` to decrease playback speed
-- The current speed will be displayed in a custom overlay
+- **Automatic Saving**: Whatever speed you set with keyboard shortcuts becomes your default for new videos
+- The current speed and source will be displayed in a custom overlay
+
+### Navigation Behavior
+- **Automatic**: The extension automatically remembers your keyboard-set speed
+- **Seamless**: Navigate to any video and it starts at your last keyboard-set speed
+- **No Setup Required**: Just use the keyboard shortcuts - navigation speed is handled automatically
+
+### Settings and Testing
+- Press `Ctrl+Shift+S` to view the settings modal
+- See your current keyboard-set speed
+- Use "Test Navigation Speed" to apply your saved speed to the current video
+- View information about how keyboard speed persistence works
 
 ### Menu Interface
 - Click on the settings gear icon in the YouTube player
