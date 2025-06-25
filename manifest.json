@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Extended Youtube Playback Speed Control",
+  "name": "Youtube Playback Speed Customization",
   "version": "2.0",
-  "description": "Enhanced speed control with comprehensive menu synchronization, extended playback speeds, and configurable navigation behavior for YouTube.",
+  "description": "Enhanced speed control with extended playback speeds and configurable navigation behavior for YouTube.",
   "content_scripts": [
     {
       "matches": ["*://www.youtube.com/*", "*://youtube.com/*"],
