@@ -30,6 +30,8 @@ const SPEED_STORAGE_KEY = 'youtube-speed-extender-preferred-speed';
 const KEYBOARD_SPEED_STORAGE_KEY = 'youtube-speed-extender-keyboard-speed';
 const NAVIGATION_MODE_KEY = 'youtube-speed-extender-navigation-mode';
 const CUSTOM_NAVIGATION_SPEED_KEY = 'youtube-speed-extender-custom-navigation-speed';
+const INCREASE_SPEED_KEY_STORAGE = 'youtube-speed-extender-increase-key';
+const DECREASE_SPEED_KEY_STORAGE = 'youtube-speed-extender-decrease-key';
 
 // Navigation mode options
 const NAVIGATION_MODES = {
@@ -367,7 +369,7 @@ function initializeExtension(isNavigation = false) {
 
 /**
  * Main keyboard event handler for speed control
- * Listens for '.' (increase speed) and ',' (decrease speed) key presses
+ * Listens for custom increase/decrease speed key presses
  * Also handles 'Ctrl+Shift+S' for opening speed settings
  */
 document.addEventListener('keydown', (e) => {
@@ -382,8 +384,12 @@ document.addEventListener('keydown', (e) => {
     return;
   }
 
-  // Only handle period and comma keys
-  if (e.key !== '.' && e.key !== ',') return;
+  // Get custom keys
+  const increaseKey = loadIncreaseSpeedKey();
+  const decreaseKey = loadDecreaseSpeedKey();
+
+  // Only handle the configured speed control keys
+  if (e.key !== increaseKey && e.key !== decreaseKey) return;
   
   const video = document.querySelector('video');
   if (!video) return;
@@ -393,9 +399,9 @@ document.addEventListener('keydown', (e) => {
   
   // Calculate new speed index based on key press
   let newIndex = currentIndex;
-  if (e.key === '.') {
+  if (e.key === increaseKey) {
     newIndex = Math.min(currentIndex + 1, speedOptions.length - 1);
-  } else if (e.key === ',') {
+  } else if (e.key === decreaseKey) {
     newIndex = Math.max(currentIndex - 1, 0);
   }
 
@@ -984,6 +990,8 @@ function showSpeedSettingsModal() {
   const currentMode = loadNavigationMode();
   const currentCustomSpeed = loadCustomNavigationSpeed();
   const currentKeyboardSpeed = loadKeyboardSpeed();
+  const currentIncreaseKey = loadIncreaseSpeedKey();
+  const currentDecreaseKey = loadDecreaseSpeedKey();
 
   // Create modal HTML
   modalContent.innerHTML = `
@@ -1057,15 +1065,46 @@ function showSpeedSettingsModal() {
               <span style="color: #aaa; font-size: 13px;">playback speed</span>
             </div>
           </div>
-        </label>      </div>
-    </div>
+        </label>      </div>    </div>
     
     <div style="margin-bottom: 24px; padding: 16px; background: #2a2a2a; border-radius: 8px; border-left: 3px solid #ff0000;">
-      <h4 style="margin: 0 0 8px 0; color: #fff; font-size: 14px; font-weight: 500;">Keyboard Shortcuts</h4>
-      <div style="color: #aaa; font-size: 13px; line-height: 1.4;">
-        • <strong style="color: #fff;">.</strong> (period) - Increase speed<br>
-        • <strong style="color: #fff;">,</strong> (comma) - Decrease speed<br>
-        • <strong style="color: #fff;">Ctrl+Shift+S</strong> - Open settings (this modal)
+      <h4 style="margin: 0 0 12px 0; color: #fff; font-size: 14px; font-weight: 500;">Keyboard Shortcuts</h4>
+      
+      <div style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px;">        <div style="display: flex; align-items: center; gap: 12px;">
+          <label style="color: #fff; font-size: 13px; min-width: 120px;">Increase Speed:</label>
+          <input type="text" id="increase-key-input" value="${currentIncreaseKey}" maxlength="1" style="
+            background: #333; 
+            color: #fff; 
+            border: 1px solid #555; 
+            border-radius: 4px; 
+            padding: 6px 8px; 
+            font-size: 14px;
+            width: 50px;
+            text-align: center;
+            font-family: monospace;
+          " placeholder="." readonly>
+          <span style="color: #aaa; font-size: 12px;">Click and press any key</span>
+        </div>
+        
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <label style="color: #fff; font-size: 13px; min-width: 120px;">Decrease Speed:</label>
+          <input type="text" id="decrease-key-input" value="${currentDecreaseKey}" maxlength="1" style="
+            background: #333; 
+            color: #fff; 
+            border: 1px solid #555; 
+            border-radius: 4px; 
+            padding: 6px 8px; 
+            font-size: 14px;
+            width: 50px;
+            text-align: center;
+            font-family: monospace;
+          " placeholder="," readonly>
+          <span style="color: #aaa; font-size: 12px;">Click and press any key</span>
+        </div>
+      </div>
+      
+      <div style="color: #aaa; font-size: 12px; line-height: 1.4; padding-top: 12px; border-top: 1px solid #444;">
+        Fixed shortcut: <strong style="color: #fff;">Ctrl+Shift+S</strong> - Open settings (this modal)
       </div>
     </div><div style="display: flex; gap: 12px; justify-content: flex-end;">
       <button id="cancel-settings" style="
@@ -1109,6 +1148,8 @@ function setupModalEventListeners(modalOverlay) {
   const saveButton = modalOverlay.querySelector('#save-settings');
   const customSpeedSelect = modalOverlay.querySelector('#custom-speed-select');
   const radioButtons = modalOverlay.querySelectorAll('input[name="navigation-mode"]');
+  const increaseKeyInput = modalOverlay.querySelector('#increase-key-input');
+  const decreaseKeyInput = modalOverlay.querySelector('#decrease-key-input');
 
   // Close modal handlers
   const closeModal = () => modalOverlay.remove();
@@ -1146,13 +1187,66 @@ function setupModalEventListeners(modalOverlay) {
 
   // Initialize custom speed state
   updateCustomSpeedState();
-
   // Auto-select custom mode when custom speed is changed
   customSpeedSelect.addEventListener('change', () => {
     modalOverlay.querySelector('input[value="custom"]').checked = true;
     updateCustomSpeedState();
   });
+  // Setup key input handlers
+  const setupKeyInput = (input, otherInput) => {
+    // Handle focus to prepare for key capture
+    input.addEventListener('focus', () => {
+      input.style.borderColor = '#ff0000';
+      input.style.backgroundColor = '#2a2a2a';
+    });
+    
+    input.addEventListener('keydown', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      // Don't allow certain keys
+      if (e.key === 'Escape' || e.key === 'Tab' || e.key === 'Enter' || 
+          e.key === 'Shift' || e.key === 'Control' || e.key === 'Alt' || e.key === 'Meta') {
+        input.blur();
+        return;
+      }
+      
+      // Don't allow same key for both inputs
+      if (e.key === otherInput.value) {
+        // Briefly highlight the conflict
+        input.style.borderColor = '#ff4444';
+        input.style.backgroundColor = '#443333';
+        setTimeout(() => {
+          input.style.borderColor = '#555';
+          input.style.backgroundColor = '#333';
+        }, 1000);
+        return;
+      }
+      
+      // Set the key
+      input.value = e.key;
+      input.style.borderColor = '#00aa00';
+      input.style.backgroundColor = '#333';
+      setTimeout(() => {
+        input.style.borderColor = '#555';
+        input.blur();
+      }, 500);
+    });
+    
+    // Prevent typing in the input
+    input.addEventListener('input', (e) => {
+      e.preventDefault();
+    });
+    
+    // Clear focus styles on blur
+    input.addEventListener('blur', () => {
+      input.style.borderColor = '#555';
+      input.style.backgroundColor = '#333';
+    });
+  };
 
+  setupKeyInput(increaseKeyInput, decreaseKeyInput);
+  setupKeyInput(decreaseKeyInput, increaseKeyInput);
   // Save settings handler
   saveButton.addEventListener('click', () => {
     // Save the selected navigation mode
@@ -1164,6 +1258,25 @@ function setupModalEventListeners(modalOverlay) {
       const customSpeed = parseFloat(customSpeedSelect.value);
       saveCustomNavigationSpeed(customSpeed);
     }
+    
+    // Save custom keyboard shortcuts
+    const increaseKey = increaseKeyInput.value || '.';
+    const decreaseKey = decreaseKeyInput.value || ',';
+    
+    // Validate that keys are different
+    if (increaseKey === decreaseKey) {
+      // Show error and don't save
+      increaseKeyInput.style.borderColor = '#ff4444';
+      decreaseKeyInput.style.borderColor = '#ff4444';
+      setTimeout(() => {
+        increaseKeyInput.style.borderColor = '#555';
+        decreaseKeyInput.style.borderColor = '#555';
+      }, 2000);
+      return;
+    }
+    
+    saveIncreaseSpeedKey(increaseKey);
+    saveDecreaseSpeedKey(decreaseKey);
     
     // Show confirmation
     showSettingsConfirmation();
@@ -1258,4 +1371,56 @@ function loadKeyboardSpeed() {
     // Silently handle storage errors
   }
   return 1; // Default to normal speed
+}
+
+/**
+ * Saves the custom increase speed key
+ * @param {string} key - The key for increasing speed
+ */
+function saveIncreaseSpeedKey(key) {
+  try {
+    localStorage.setItem(INCREASE_SPEED_KEY_STORAGE, key);
+  } catch (error) {
+    // Silently handle storage errors
+  }
+}
+
+/**
+ * Loads the custom increase speed key
+ * @returns {string} The saved key or '.' as default
+ */
+function loadIncreaseSpeedKey() {
+  try {
+    const savedKey = localStorage.getItem(INCREASE_SPEED_KEY_STORAGE);
+    return savedKey || '.';
+  } catch (error) {
+    // Silently handle storage errors
+  }
+  return '.'; // Default to period
+}
+
+/**
+ * Saves the custom decrease speed key
+ * @param {string} key - The key for decreasing speed
+ */
+function saveDecreaseSpeedKey(key) {
+  try {
+    localStorage.setItem(DECREASE_SPEED_KEY_STORAGE, key);
+  } catch (error) {
+    // Silently handle storage errors
+  }
+}
+
+/**
+ * Loads the custom decrease speed key
+ * @returns {string} The saved key or ',' as default
+ */
+function loadDecreaseSpeedKey() {
+  try {
+    const savedKey = localStorage.getItem(DECREASE_SPEED_KEY_STORAGE);
+    return savedKey || ',';
+  } catch (error) {
+    // Silently handle storage errors
+  }
+  return ','; // Default to comma
 }

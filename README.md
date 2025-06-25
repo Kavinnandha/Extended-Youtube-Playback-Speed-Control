@@ -1,98 +1,198 @@
-# YouTube Playback Speed Extender
+# YouTube Speed Extender
 
-A Chrome extension that extends YouTube's playback speed options beyond the default range and provides keyboard shortcuts for quick speed adjustments with configurable navigation behavior.
+![Version](https://img.shields.io/badge/version-2.0-blue.svg)
+![Manifest](https://img.shields.io/badge/manifest-v3-green.svg)
+![License](https://img.shields.io/badge/license-MIT-orange.svg)
 
-## Features
+An advanced Browser extension that provides enhanced playback speed control for YouTube videos with extended speed options, keyboard shortcuts, and intelligent speed persistence.
 
-- **Extended Speed Options**: Access playback speeds from 0.5x to 5x (0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5)
-- **Keyboard Shortcuts**: 
-  - Press `.` (period) to increase speed
-  - Press `,` (comma) to decrease speed
-  - Press `Ctrl+Shift+S` to view settings and test behavior
-- **Automatic Speed Persistence**: Keyboard-set speeds are automatically saved and used for navigation
-  - **Keyboard Speed Memory**: Whatever speed you set with `.` and `,` keys becomes the default for new videos
-  - **Seamless Navigation**: Navigate to any video and it starts at your keyboard-set speed
-  - **No Configuration Needed**: Works automatically - just use the keyboard shortcuts
-- **Settings Modal**: View current keyboard speed and test navigation behavior
-- **Custom Overlay**: Shows current playback speed and source when changed (keyboard, menu, test, etc.)
-- **Complete Menu Integration**: Synchronizes with and enhances YouTube's built-in speed menu
-- **Real-time Menu Updates**: Keeps all player menus updated with current speed
-- **Smart Navigation**: Automatically applies your keyboard-set speed when navigating between YouTube videos
+## ✨ Features
 
-## Installation
+### 🎯 Extended Speed Range
+- **10 Speed Options**: 0.5x, 1x, 1.5x, 2x, 2.5x, 3x, 3.5x, 4x, 4.5x, 5x
+- **Seamless Integration**: Works with YouTube's native speed controls
+- **Real-time Synchronization**: Updates YouTube's settings menu in real-time
 
-1. Clone or download this repository
-2. Open Chrome and navigate to `chrome://extensions/`
-3. Enable "Developer mode" in the top right corner
-4. Click "Load unpacked" and select the extension folder
-5. The extension will now be active on YouTube
+### ⌨️ Keyboard Controls
+- **Customizable Shortcuts**: Configure your own increase/decrease speed keys
+- **Default Keys**: 
+  - `.` (period) - Increase speed
+  - `,` (comma) - Decrease speed
+  - `Ctrl+Shift+S` - Open settings modal
+- **Visual Feedback**: On-screen overlay shows current speed when changed
+- **Smart Input Detection**: Ignores keypresses in input fields and editable content
 
-## Usage
+### 🧠 Intelligent Speed Management
+- **Speed Persistence**: Remembers your preferred speed across videos
+- **Navigation Modes**: Three different behaviors for new videos:
+  - **Continue**: Maintain current speed when navigating to new videos
+  - **Default**: Always start new videos at 1x speed
+  - **Custom**: Start new videos at a specific speed of your choice
+- **Seeking Compatibility**: Maintains speed after video seeking operations
 
-### Keyboard Speed Control
-- Navigate to any YouTube video
-- Use `.` to increase playback speed
-- Use `,` to decrease playback speed
-- **Automatic Saving**: Whatever speed you set with keyboard shortcuts becomes your default for new videos
-- The current speed and source will be displayed in a custom overlay
+### 🎛️ Advanced Settings
+- **Settings Modal**: Comprehensive settings interface accessible via `Ctrl+Shift+S`
+- **Visual Confirmation**: Success notifications when settings are saved
+- **Persistent Storage**: All preferences saved locally and persist across browser sessions
 
-### Navigation Behavior
-- **Automatic**: The extension automatically remembers your keyboard-set speed
-- **Seamless**: Navigate to any video and it starts at your last keyboard-set speed
-- **No Setup Required**: Just use the keyboard shortcuts - navigation speed is handled automatically
+## 🚀 Installation
 
-### Settings and Testing
-- Press `Ctrl+Shift+S` to view the settings modal
-- See your current keyboard-set speed
-- Use "Test Navigation Speed" to apply your saved speed to the current video
-- View information about how keyboard speed persistence works
+### From Chrome Web Store
+*Coming soon - extension is currently in development*
 
-### Menu Interface
-- Click on the settings gear icon in the YouTube player
-- Select "Playback speed" to see the enhanced speed options (0.5x to 5x)
-- Click any speed to apply it instantly
-- Changes made via the menu will also update the keyboard shortcut state
-- Changes made via keyboard shortcuts will update the menu selection
+### Manual Installation (Developer Mode)
+1. **Download** or clone this repository
+2. **Open Browser** and navigate to `//extensions/`
+3. **Enable Developer Mode** (toggle in top-right corner)
+4. **Click "Load unpacked"** and select the extension folder
+5. **Pin the extension** to your toolbar for easy access
 
-## Technical Details
+## 📖 Usage Guide
 
-- **Manifest Version**: 3
-- **Permissions**: `activeTab` only
-- **Content Script**: Runs on all YouTube pages
-- **No Background Scripts**: Minimal resource usage
+### Basic Speed Control
+1. **Navigate** to any YouTube video
+2. **Use keyboard shortcuts** to change speed:
+   - Press `.` to increase speed
+   - Press `,` to decrease speed
+3. **Visual feedback** will show the current speed
+4. **Speed persists** across video navigation based on your settings
 
-## Compatibility
+### Accessing Settings
+1. **Press `Ctrl+Shift+S`** while on YouTube, or
+2. **Use the extension's settings** from the Chrome toolbar
+3. **Configure navigation behavior** and custom shortcuts
+4. **Save settings** to apply changes
 
-- Works on all YouTube pages (`*.youtube.com/*`)
-- Compatible with Chrome's Manifest V3
-- Handles YouTube's single-page application navigation
-- Respects user input fields (won't interfere with typing)
+### Navigation Modes
 
-## Files
+#### Continue Mode (Default)
+- Maintains whatever speed you were using on the previous video
+- Best for consistent viewing experience
 
-- `manifest.json`: Extension configuration
-- `content.js`: Main functionality and YouTube integration
-- `icons/`: Directory containing extension icons (16px, 48px, 128px)
-- `README.md`: This documentation
+#### Default Mode
+- Always starts new videos at 1x (normal) speed
+- Useful if you want to manually set speed for each video
 
-## Privacy
+#### Custom Mode
+- Starts all new videos at a specific speed you choose
+- Perfect for users who prefer a consistent non-standard speed
 
-This extension:
-- Only runs on YouTube pages
-- Does not collect any user data
-- Does not make external network requests
-- Uses minimal permissions (`activeTab` only)
+## 🔧 Configuration Options
 
-## Troubleshooting
+### Speed Settings
+| Option | Description | Default |
+|--------|-------------|---------|
+| Navigation Mode | How speed behaves on new videos | Continue |
+| Custom Speed | Fixed speed for Custom mode | 1x |
 
-If the extension stops working:
-1. Refresh the YouTube page
-2. Check if the extension is enabled in Chrome extensions
-3. Try disabling and re-enabling the extension
+### Keyboard Shortcuts
+| Action | Default Key | Customizable |
+|--------|-------------|--------------|
+| Increase Speed | `.` (period) | ✅ |
+| Decrease Speed | `,` (comma) | ✅ |
+| Open Settings | `Ctrl+Shift+S` | (Fixed) |
 
-## Version History
+## 🏗️ Technical Architecture
 
-- **v1.3**: Improved menu synchronization with settings panel updates
-- **v1.2**: Added native YouTube speed menu synchronization and enhancement
-- **v1.1**: Improved error handling, better overlay positioning, enhanced navigation support
-- **v1.0**: Initial release with basic functionality
+### Core Components
+
+#### Speed Management System
+- **Speed Options Array**: Predefined speed values (0.5x - 5x)
+- **State Management**: Prevents recursive updates and conflicts
+- **Storage Integration**: Local storage for persistence
+
+#### Event Handling
+- **Keyboard Events**: Custom key mapping with input field detection
+- **Video Events**: Rate change and seeking event listeners
+- **Navigation Detection**: URL change monitoring for SPA navigation
+
+#### UI Integration
+- **Settings Modal**: Feature-rich configuration interface
+- **Speed Overlay**: Temporary visual feedback for speed changes
+- **Menu Synchronization**: Real-time updates to YouTube's native controls
+
+### Browser Compatibility
+- **Chrome**: Full support (Manifest V3)
+- **Edge**: Compatible with Chromium-based versions
+- **Firefox**: Planned support (Manifest V2 version in development)
+
+## 🗂️ Project Structure
+
+```
+Custom-Youtube-Playback-Speed-Control/
+├── manifest.json           # Extension manifest (v3)
+├── content.js              # Main content script
+├── icons/                  # Extension icons
+│   ├── icon16.png         # 16x16 icon
+│   ├── icon48.png         # 48x48 icon
+│   └── icon128.png        # 128x128 icon
+├── README.md              # This documentation
+├── API.md                 # API documentation
+├── CONTRIBUTING.md        # Contribution guidelines
+└── docs/                  # Additional documentation
+    ├── INSTALLATION.md    # Detailed installation guide
+    ├── TROUBLESHOOTING.md # Common issues and solutions
+    └── CHANGELOG.md       # Version history
+```
+
+## 🐛 Troubleshooting
+
+### Common Issues
+
+#### Extension Not Working
+1. **Refresh** the YouTube page
+2. **Check** if extension is enabled in `chrome://extensions/`
+3. **Restart** Chrome browser
+4. **Reinstall** the extension if issues persist
+
+#### Keyboard Shortcuts Not Responding
+1. **Ensure** you're not in an input field
+2. **Check** custom key settings in the extension settings
+3. **Verify** no other extensions are conflicting
+
+#### Speed Not Persisting
+1. **Check** your navigation mode settings
+2. **Ensure** local storage is enabled in your browser
+3. **Try** switching navigation modes and back
+
+### Performance Considerations
+- Extension uses minimal resources and doesn't affect video performance
+- Settings are stored locally - no external network requests
+- Event listeners are optimized to prevent conflicts with YouTube's code
+
+## 🤝 Contributing
+
+We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+### Development Setup
+1. **Clone** the repository
+2. **Load** in Chrome as unpacked extension
+3. **Make changes** to `content.js`
+4. **Reload** extension in Chrome to test changes
+
+### Reporting Issues
+- Use the GitHub Issues tab
+- Provide detailed reproduction steps
+- Include Browser version and extension version
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- YouTube for providing a robust video platform
+- The Browser Extensions API documentation
+- Community feedback and feature requests
+
+## 📞 Support
+
+- **GitHub Issues**: For bug reports and feature requests
+- **Documentation**: Check the `docs/` folder for detailed guides
+- **Email**: kavinnandhakavin@gmail.com
+
+---
+
+**Made with ❤️ for YouTube power users**
+
+*Last updated: June 25, 2025*
